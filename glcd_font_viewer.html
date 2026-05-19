@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLCD Font Bitmap Viewer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0c0c14;color:#b0b8c8;font-family:'JetBrains Mono',monospace;min-height:100vh}
+
+  .header{padding:1.5rem 2rem;border-bottom:1px solid #1a1a2e}
+  .header h1{font-size:1.2rem;color:#e0e4ec;margin-bottom:.2rem}
+  .header .sub{font-size:.7rem;color:#4a5060}
+
+  .toolbar{
+    display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem;
+    padding:1rem 2rem;border-bottom:1px solid #1a1a2e;background:#0e0e18;
+  }
+  .field{display:flex;flex-direction:column;gap:.25rem}
+  .field label{font-size:.65rem;color:#5a6878;text-transform:uppercase;letter-spacing:.05em}
+  .field input[type=number]{
+    width:5rem;padding:.35rem .5rem;
+    background:#14142a;border:1px solid #252540;border-radius:4px;
+    color:#c0c8d8;font-family:inherit;font-size:.8rem;
+  }
+  .field input[type=number]:focus{outline:none;border-color:#44e8a0}
+  .field select{
+    padding:.35rem .5rem;
+    background:#14142a;border:1px solid #252540;border-radius:4px;
+    color:#c0c8d8;font-family:inherit;font-size:.8rem;
+  }
+
+  .drop-zone{
+    position:relative;
+    padding:.6rem 1.2rem;
+    background:#14142a;border:2px dashed #252540;border-radius:6px;
+    cursor:pointer;font-size:.8rem;color:#6a7a90;
+    transition:border-color .2s,background .2s;
+  }
+  .drop-zone:hover,.drop-zone.over{border-color:#44e8a0;background:#141a24}
+  .drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .drop-zone .filename{color:#44e8a0;font-weight:600}
+
+  .stats{
+    padding:.6rem 2rem;font-size:.7rem;color:#5a6878;
+    border-bottom:1px solid #1a1a2e;background:#0e0e18;
+    display:none;
+  }
+  .stats.visible{display:flex;gap:1.5rem;flex-wrap:wrap}
+  .stats span{color:#7a8aaa}
+
+  .grid{display:flex;flex-wrap:wrap;gap:1.2rem;padding:1.5rem 2rem}
+
+  .char-card{
+    background:#12121e;border:1px solid #1e1e30;border-radius:6px;
+    padding:.8rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;
+  }
+  .char-label{font-size:.65rem;color:#5a7090;font-weight:600}
+  .char-label .ch{color:#44e8a0;font-size:.8rem}
+  canvas{image-rendering:pixelated;border-radius:3px}
+
+  .empty{padding:4rem 2rem;text-align:center;color:#3a4050;font-size:.85rem}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>GLCD Font Bitmap Viewer</h1>
+  <div class="sub">Load a .h font file — parses the first const array of hex bytes</div>
+</div>
+
+<div class="toolbar">
+  <div class="drop-zone" id="dropZone">
+    <span id="dropLabel">Drop .h file or click to browse</span>
+    <input type="file" id="fileInput" accept=".h,.c,.hpp,.cpp,.txt">
+  </div>
+  <div class="field">
+    <label>Font Height (px)</label>
+    <input type="number" id="fontHeight" value="28" min="1" max="64">
+  </div>
+  <div class="field">
+    <label>Max Width (cols)</label>
+    <input type="number" id="maxCols" value="20" min="1" max="64">
+  </div>
+  <div class="field">
+    <label>Pixel Scale</label>
+    <input type="number" id="scale" value="4" min="1" max="16">
+  </div>
+  <div class="field">
+    <label>First Char Code</label>
+    <input type="number" id="firstChar" value="46" min="0" max="255">
+  </div>
+  <div class="field">
+    <label>On Color</label>
+    <select id="colorSelect">
+      <option value="#44e8a0">Green</option>
+      <option value="#e8e8e8">White</option>
+      <option value="#44a8e8">Blue</option>
+      <option value="#e8a844">Amber</option>
+      <option value="#e84488">Pink</option>
+    </select>
+  </div>
+</div>
+
+<div class="stats" id="stats">
+  <div>Array: <span id="statName">—</span></div>
+  <div>Total bytes: <span id="statBytes">—</span></div>
+  <div>Record size: <span id="statRecord">—</span></div>
+  <div>Characters: <span id="statChars">—</span></div>
+</div>
+
+<div id="grid" class="grid">
+  <div class="empty">No file loaded</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let rawBytes = null;
+let arrayName = '';
+
+// --- File loading ---
+$('fileInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  loadFile(f);
+});
+
+const dz = $('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+
+function loadFile(file) {
+  $('dropLabel').innerHTML = `<span class="filename">${file.name}</span>`;
+  const reader = new FileReader();
+  reader.onload = e => {
+    parseHeader(e.target.result);
+    render();
+  };
+  reader.readAsText(file);
+}
+
+// --- Parsing ---
+function parseHeader(src) {
+  // Try to find the first array with hex bytes.
+  // Patterns: const unsigned char NAME[] = { ... };
+  //           const char NAME[] PROGMEM = { ... };
+  //           const uint8_t NAME[] = { ... };
+  //           static const ... NAME[] = { ... };
+  // We'll find the first '{' ... '}' block that contains 0x values.
+
+  // Try to extract array name from declaration before the brace
+  const declRe = /(?:static\s+)?(?:const\s+)?(?:unsigned\s+)?(?:char|uint8_t|int8_t|PROGMEM\s+\w+)\s+([\w]+)\s*\[[\w\s]*\]\s*(?:PROGMEM\s*)?=/i;
+  const declMatch = src.match(declRe);
+  arrayName = declMatch ? declMatch[1] : 'unknown';
+
+  // Also try broader pattern
+  if (arrayName === 'unknown') {
+    const broad = src.match(/([\w]+)\s*\[\s*\]\s*(?:PROGMEM\s*)?=\s*\{/);
+    if (broad) arrayName = broad[1];
+  }
+
+  // Extract all hex bytes from the first { ... } block
+  const braceStart = src.indexOf('{');
+  const braceEnd = src.lastIndexOf('}');
+  if (braceStart < 0 || braceEnd < 0) {
+    rawBytes = [];
+    return;
+  }
+
+  const body = src.substring(braceStart + 1, braceEnd);
+  const hexMatches = body.match(/0x[0-9A-Fa-f]{1,2}/g);
+  rawBytes = hexMatches ? hexMatches.map(h => parseInt(h, 16)) : [];
+}
+
+// --- Rendering ---
+function render() {
+  if (!rawBytes || rawBytes.length === 0) {
+    $('grid').innerHTML = '<div class="empty">No hex data found in file</div>';
+    $('stats').classList.remove('visible');
+    return;
+  }
+
+  const height = parseInt($('fontHeight').value) || 28;
+  const maxW   = parseInt($('maxCols').value) || 20;
+  const scale  = parseInt($('scale').value) || 4;
+  const first  = parseInt($('firstChar').value) || 0;
+  const onColor = $('colorSelect').value;
+
+  const bytesPerCol = Math.ceil(height / 8);
+  const recordSize = 1 + maxW * bytesPerCol;
+  const numChars = Math.floor(rawBytes.length / recordSize);
+
+  // Stats
+  $('statName').textContent = arrayName;
+  $('statBytes').textContent = rawBytes.length;
+  $('statRecord').textContent = `${recordSize} (1 + ${maxW}×${bytesPerCol})`;
+  $('statChars').textContent = numChars;
+  $('stats').classList.add('visible');
+
+  const container = $('grid');
+  container.innerHTML = '';
+
+  // Precompute a darker shade for pixel border effect
+  const dim = dimColor(onColor, 0.55);
+
+  for (let i = 0; i < numChars; i++) {
+    const offset = i * recordSize;
+    const charW = rawBytes[offset];
+    const w = Math.min(charW, maxW);
+    const code = first + i;
+    const printable = (code >= 32 && code <= 126) ? String.fromCharCode(code) : '·';
+
+    const card = document.createElement('div');
+    card.className = 'char-card';
+
+    const label = document.createElement('div');
+    label.className = 'char-label';
+    label.innerHTML = `<span class="ch">${escHtml(printable)}</span> 0x${code.toString(16).toUpperCase().padStart(2,'0')}`;
+    card.appendChild(label);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w * scale;
+    canvas.height = height * scale;
+    canvas.style.width = (w * scale) + 'px';
+    canvas.style.height = (height * scale) + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0c0c14';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let col = 0; col < w; col++) {
+      const colOff = offset + 1 + col * bytesPerCol;
+      // Build column bitmask
+      let colBits = 0;
+      for (let b = 0; b < bytesPerCol; b++) {
+        const byte = rawBytes[colOff + b] || 0;
+        colBits |= byte << (b * 8);
+      }
+
+      for (let row = 0; row < height; row++) {
+        if (colBits & (1 << row)) {
+          ctx.fillStyle = onColor;
+          ctx.fillRect(col * scale, row * scale, scale, scale);
+          ctx.fillStyle = dim;
+          ctx.fillRect(col * scale, row * scale, scale, 1);
+          ctx.fillRect(col * scale, row * scale, 1, scale);
+        }
+      }
+    }
+
+    card.appendChild(canvas);
+    container.appendChild(card);
+  }
+}
+
+// Re-render on param change
+['fontHeight','maxCols','scale','firstChar','colorSelect'].forEach(id => {
+  $(id).addEventListener('change', render);
+  $(id).addEventListener('input', render);
+});
+
+function dimColor(hex, factor) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.round(r*factor)},${Math.round(g*factor)},${Math.round(b*factor)})`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
