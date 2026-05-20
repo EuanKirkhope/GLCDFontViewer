@@ -7,67 +7,78 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
   *{margin:0;padding:0;box-sizing:border-box}
-  body{background:#0c0c14;color:#b0b8c8;font-family:'JetBrains Mono',monospace;min-height:100vh}
+  body{background:#444;color:#aaa;font-family:'JetBrains Mono',monospace;min-height:100vh}
 
-  .header{padding:1.5rem 2rem;border-bottom:1px solid #1a1a2e}
-  .header h1{font-size:1.2rem;color:#e0e4ec;margin-bottom:.2rem}
-  .header .sub{font-size:.7rem;color:#4a5060}
+  .header{padding:1.5rem 2rem;border-bottom:1px solid #ccc}
+  .header h1{font-size:1.2rem;color:#ccc;margin-bottom:.2rem}
+  .header .sub{font-size:.7rem;color:#888}
 
   .toolbar{
     display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem;
-    padding:1rem 2rem;border-bottom:1px solid #1a1a2e;background:#0e0e18;
+    padding:1rem 2rem;border-bottom:1px solid #ccc;background:#555;
   }
   .field{display:flex;flex-direction:column;gap:.25rem}
-  .field label{font-size:.65rem;color:#5a6878;text-transform:uppercase;letter-spacing:.05em}
+  .field label{font-size:.65rem;color:#999;text-transform:uppercase;letter-spacing:.05em}
   .field input[type=number]{
     width:5rem;padding:.35rem .5rem;
-    background:#14142a;border:1px solid #252540;border-radius:4px;
-    color:#c0c8d8;font-family:inherit;font-size:.8rem;
+    background:#444;border:1px solid #ccc;border-radius:4px;
+    color:#aaa;font-family:inherit;font-size:.8rem;
   }
-  .field input[type=number]:focus{outline:none;border-color:#44e8a0}
+  .field input[type=number]:focus{outline:none;border-color:#fff}
+  .field input[type=number]:disabled{opacity:.4;cursor:not-allowed}
   .field select{
     padding:.35rem .5rem;
-    background:#14142a;border:1px solid #252540;border-radius:4px;
-    color:#c0c8d8;font-family:inherit;font-size:.8rem;
+    background:#444;border:1px solid #ccc;border-radius:4px;
+    color:#aaa;font-family:inherit;font-size:.8rem;
   }
+  .field select:focus{outline:none;border-color:#fff}
 
   .drop-zone{
     position:relative;
     padding:.6rem 1.2rem;
-    background:#14142a;border:2px dashed #252540;border-radius:6px;
-    cursor:pointer;font-size:.8rem;color:#6a7a90;
+    background:#444;border:2px dashed #ccc;border-radius:6px;
+    cursor:pointer;font-size:.8rem;color:#999;
     transition:border-color .2s,background .2s;
   }
-  .drop-zone:hover,.drop-zone.over{border-color:#44e8a0;background:#141a24}
+  .drop-zone:hover,.drop-zone.over{border-color:#fff;background:#555}
   .drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .drop-zone .filename{color:#44e8a0;font-weight:600}
 
+  .format-info{
+    padding:.5rem 2rem;font-size:.68rem;color:#999;
+    border-bottom:1px solid #ccc;background:#555;
+    line-height:1.6;display:none;
+  }
+  .format-info.visible{display:block}
+  .format-info code{color:#ccc;background:#444;padding:.1rem .3rem;border-radius:3px}
+
   .stats{
-    padding:.6rem 2rem;font-size:.7rem;color:#5a6878;
-    border-bottom:1px solid #1a1a2e;background:#0e0e18;
+    padding:.6rem 2rem;font-size:.7rem;color:#999;
+    border-bottom:1px solid #ccc;background:#555;
     display:none;
   }
   .stats.visible{display:flex;gap:1.5rem;flex-wrap:wrap}
-  .stats span{color:#7a8aaa}
+  .stats span{color:#aaa}
 
   .grid{display:flex;flex-wrap:wrap;gap:1.2rem;padding:1.5rem 2rem}
 
   .char-card{
-    background:#12121e;border:1px solid #1e1e30;border-radius:6px;
+    background:#555;border:1px solid #ccc;border-radius:6px;
     padding:.8rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;
   }
-  .char-label{font-size:.65rem;color:#5a7090;font-weight:600}
+  .char-label{font-size:.65rem;color:#aaa;font-weight:600;white-space:nowrap}
   .char-label .ch{color:#44e8a0;font-size:.8rem}
+  .char-label .cw{color:#888;font-size:.55rem}
   canvas{image-rendering:pixelated;border-radius:3px}
 
-  .empty{padding:4rem 2rem;text-align:center;color:#3a4050;font-size:.85rem}
+  .empty{padding:4rem 2rem;text-align:center;color:#888;font-size:.85rem}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>GLCD Font Bitmap Viewer</h1>
-  <div class="sub">Load a .h font file — parses the first const array of hex bytes</div>
+  <div class="sub">Load a .h font file — supports STANG, MIKRO, and GLCD_UTILS table formats</div>
 </div>
 
 <div class="toolbar">
@@ -76,20 +87,37 @@
     <input type="file" id="fileInput" accept=".h,.c,.hpp,.cpp,.txt">
   </div>
   <div class="field">
-    <label>Font Height (px)</label>
-    <input type="number" id="fontHeight" value="28" min="1" max="64">
+    <label>Table Format</label>
+    <select id="tableFormat">
+      <option value="auto">Auto-detect</option>
+      <option value="stang">STANG</option>
+      <option value="mikro">MIKRO</option>
+      <option value="glcd_utils">GLCD_UTILS</option>
+    </select>
   </div>
   <div class="field">
-    <label>Max Width (cols)</label>
-    <input type="number" id="maxCols" value="20" min="1" max="64">
+    <label>Header</label>
+    <select id="headerMode">
+      <option value="auto">Auto</option>
+      <option value="yes">4-byte header</option>
+      <option value="no">No header</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Font Width</label>
+    <input type="number" id="fontWidth" value="5" min="1" max="64">
+  </div>
+  <div class="field">
+    <label>Font Height</label>
+    <input type="number" id="fontHeight" value="7" min="1" max="64">
+  </div>
+  <div class="field">
+    <label>First Char</label>
+    <input type="number" id="firstChar" value="32" min="0" max="255">
   </div>
   <div class="field">
     <label>Pixel Scale</label>
-    <input type="number" id="scale" value="4" min="1" max="16">
-  </div>
-  <div class="field">
-    <label>First Char Code</label>
-    <input type="number" id="firstChar" value="46" min="0" max="255">
+    <input type="number" id="scale" value="6" min="1" max="16">
   </div>
   <div class="field">
     <label>On Color</label>
@@ -103,11 +131,14 @@
   </div>
 </div>
 
+<div class="format-info" id="formatInfo"></div>
+
 <div class="stats" id="stats">
   <div>Array: <span id="statName">—</span></div>
-  <div>Total bytes: <span id="statBytes">—</span></div>
-  <div>Record size: <span id="statRecord">—</span></div>
-  <div>Characters: <span id="statChars">—</span></div>
+  <div>Format: <span id="statFormat">—</span></div>
+  <div>Bytes: <span id="statBytes">—</span></div>
+  <div>Bytes/char: <span id="statRecord">—</span></div>
+  <div>Chars: <span id="statChars">—</span></div>
 </div>
 
 <div id="grid" class="grid">
@@ -118,12 +149,18 @@
 const $ = id => document.getElementById(id);
 let rawBytes = null;
 let arrayName = '';
+let detectedFormat = null;
+
+const FORMAT_DESCRIPTIONS = {
+  stang:      'No header. Fixed width. Each char = <code>W × ⌈H/8⌉</code> bytes of column data.',
+  mikro:      '4-byte header: <code>[width, height, firstChar, lastChar]</code>. Fixed width. Data starts at byte 4.',
+  glcd_utils: '4-byte header: <code>[maxWidth, height, firstChar, charCount]</code>. Variable width — each char record starts with a width byte, padded to <code>1 + maxW × ⌈H/8⌉</code>.',
+};
 
 // --- File loading ---
 $('fileInput').addEventListener('change', e => {
   const f = e.target.files[0];
-  if (!f) return;
-  loadFile(f);
+  if (f) loadFile(f);
 });
 
 const dz = $('dropZone');
@@ -139,6 +176,8 @@ function loadFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     parseHeader(e.target.result);
+    if ($('tableFormat').value === 'auto') autoDetect();
+    updateUI();
     render();
   };
   reader.readAsText(file);
@@ -146,35 +185,120 @@ function loadFile(file) {
 
 // --- Parsing ---
 function parseHeader(src) {
-  // Try to find the first array with hex bytes.
-  // Patterns: const unsigned char NAME[] = { ... };
-  //           const char NAME[] PROGMEM = { ... };
-  //           const uint8_t NAME[] = { ... };
-  //           static const ... NAME[] = { ... };
-  // We'll find the first '{' ... '}' block that contains 0x values.
-
-  // Try to extract array name from declaration before the brace
-  const declRe = /(?:static\s+)?(?:const\s+)?(?:unsigned\s+)?(?:char|uint8_t|int8_t|PROGMEM\s+\w+)\s+([\w]+)\s*\[[\w\s]*\]\s*(?:PROGMEM\s*)?=/i;
+  // Extract array name
+  const declRe = /(?:static\s+)?(?:const\s+)?(?:unsigned\s+)?(?:char|uint8_t|int8_t)\s+([\w]+)\s*\[/i;
   const declMatch = src.match(declRe);
   arrayName = declMatch ? declMatch[1] : 'unknown';
-
-  // Also try broader pattern
   if (arrayName === 'unknown') {
     const broad = src.match(/([\w]+)\s*\[\s*\]\s*(?:PROGMEM\s*)?=\s*\{/);
     if (broad) arrayName = broad[1];
   }
 
-  // Extract all hex bytes from the first { ... } block
+  // Extract hex bytes from first { ... } block
   const braceStart = src.indexOf('{');
   const braceEnd = src.lastIndexOf('}');
-  if (braceStart < 0 || braceEnd < 0) {
-    rawBytes = [];
-    return;
-  }
+  if (braceStart < 0 || braceEnd < 0) { rawBytes = []; return; }
 
   const body = src.substring(braceStart + 1, braceEnd);
   const hexMatches = body.match(/0x[0-9A-Fa-f]{1,2}/g);
   rawBytes = hexMatches ? hexMatches.map(h => parseInt(h, 16)) : [];
+}
+
+// --- Auto-detection ---
+function autoDetect() {
+  if (!rawBytes || rawBytes.length < 5) return;
+
+  const name = arrayName.toLowerCase();
+
+  // Try to pull dimensions from array name (e.g. Font5x7, font_8x16)
+  const sizeMatch = name.match(/(\d+)\s*x\s*(\d+)/);
+  let nameW = sizeMatch ? parseInt(sizeMatch[1]) : null;
+  let nameH = sizeMatch ? parseInt(sizeMatch[2]) : null;
+
+  // --- Try MIKRO / GLCD_UTILS header detection ---
+  // Both have 4-byte headers: [w, h, first, count_or_last]
+  const hdrW = rawBytes[0];
+  const hdrH = rawBytes[1];
+  const hdrFirst = rawBytes[2];
+  const hdrFourth = rawBytes[3]; // lastChar (MIKRO) or charCount (GLCD_UTILS)
+
+  const hdrLooksValid = hdrW >= 1 && hdrW <= 64 && hdrH >= 1 && hdrH <= 64
+    && hdrFirst < 128 && hdrFourth > 0 && hdrFourth <= 224;
+
+  if (hdrLooksValid) {
+    const bpc = Math.ceil(hdrH / 8);
+    const dataBytes = rawBytes.length - 4;
+
+    // GLCD_UTILS: variable width, record = 1 + maxW * bpc
+    const glcdRec = 1 + hdrW * bpc;
+    // For GLCD_UTILS, hdrFourth = char count
+    const glcdChars = hdrFourth;
+    const glcdFit = (glcdChars * glcdRec === dataBytes);
+
+    // MIKRO: fixed width, record = w * bpc
+    const mikroRec = hdrW * bpc;
+    // For MIKRO, hdrFourth = last char, count = last - first + 1
+    const mikroChars = hdrFourth - hdrFirst + 1;
+    const mikroFit = (mikroChars > 0 && mikroChars * mikroRec === dataBytes);
+
+    if (glcdFit && !mikroFit) {
+      detectedFormat = 'glcd_utils';
+      $('fontWidth').value = hdrW;
+      $('fontHeight').value = hdrH;
+      $('firstChar').value = hdrFirst;
+      return;
+    }
+    if (mikroFit && !glcdFit) {
+      detectedFormat = 'mikro';
+      $('fontWidth').value = hdrW;
+      $('fontHeight').value = hdrH;
+      $('firstChar').value = hdrFirst;
+      return;
+    }
+    if (glcdFit && mikroFit) {
+      // Both fit — prefer GLCD_UTILS if the 5th byte looks like a per-char width
+      const fifthByte = rawBytes[4];
+      if (fifthByte >= 1 && fifthByte <= hdrW) {
+        detectedFormat = 'glcd_utils';
+      } else {
+        detectedFormat = 'mikro';
+      }
+      $('fontWidth').value = hdrW;
+      $('fontHeight').value = hdrH;
+      $('firstChar').value = hdrFirst;
+      return;
+    }
+  }
+
+  // --- Fallback: STANG (no header) ---
+  detectedFormat = 'stang';
+  if (nameW && nameH) {
+    $('fontWidth').value = nameW;
+    $('fontHeight').value = nameH;
+  }
+  // Verify byte count
+  const w = parseInt($('fontWidth').value);
+  const h = parseInt($('fontHeight').value);
+  const bpc = Math.ceil(h / 8);
+  const rec = w * bpc;
+  if (rawBytes.length % rec !== 0) {
+    // Doesn't divide cleanly — might still be stang with different dims
+    // Leave as-is and let user adjust
+  }
+}
+
+function updateUI() {
+  const fmt = ($('tableFormat').value === 'auto') ? detectedFormat : $('tableFormat').value;
+  const info = $('formatInfo');
+  if (fmt && FORMAT_DESCRIPTIONS[fmt]) {
+    info.innerHTML = `<strong>${fmt.toUpperCase()}</strong>: ${FORMAT_DESCRIPTIONS[fmt]}`;
+    info.classList.add('visible');
+  } else {
+    info.classList.remove('visible');
+  }
+
+  // Disable width field for GLCD_UTILS (read from header) and MIKRO (read from header)
+  // but leave editable so user can override
 }
 
 // --- Rendering ---
@@ -185,63 +309,65 @@ function render() {
     return;
   }
 
-  const height = parseInt($('fontHeight').value) || 28;
-  const maxW   = parseInt($('maxCols').value) || 20;
-  const scale  = parseInt($('scale').value) || 4;
-  const first  = parseInt($('firstChar').value) || 0;
+  const fmt = ($('tableFormat').value === 'auto') ? detectedFormat : $('tableFormat').value;
+  const scale  = parseInt($('scale').value) || 6;
   const onColor = $('colorSelect').value;
+  const dim = dimColor(onColor, 0.55);
 
-  const bytesPerCol = Math.ceil(height / 8);
-  const recordSize = 1 + maxW * bytesPerCol;
-  const numChars = Math.floor(rawBytes.length / recordSize);
+  let chars = [];
+
+  if (fmt === 'stang') {
+    chars = decodeStang();
+  } else if (fmt === 'mikro') {
+    chars = decodeMikro();
+  } else if (fmt === 'glcd_utils') {
+    chars = decodeGlcdUtils();
+  } else {
+    chars = decodeStang(); // fallback
+  }
 
   // Stats
   $('statName').textContent = arrayName;
+  $('statFormat').textContent = (fmt || 'stang').toUpperCase() + (useHeader() ? ' +hdr' : ' no-hdr');
   $('statBytes').textContent = rawBytes.length;
-  $('statRecord').textContent = `${recordSize} (1 + ${maxW}×${bytesPerCol})`;
-  $('statChars').textContent = numChars;
+  $('statRecord').textContent = chars.length > 0 ? chars[0].recSize : '—';
+  $('statChars').textContent = chars.length;
   $('stats').classList.add('visible');
 
   const container = $('grid');
   container.innerHTML = '';
 
-  // Precompute a darker shade for pixel border effect
-  const dim = dimColor(onColor, 0.55);
-
-  for (let i = 0; i < numChars; i++) {
-    const offset = i * recordSize;
-    const charW = rawBytes[offset];
-    const w = Math.min(charW, maxW);
-    const code = first + i;
-    const printable = (code >= 32 && code <= 126) ? String.fromCharCode(code) : '·';
-
+  for (const ch of chars) {
     const card = document.createElement('div');
     card.className = 'char-card';
 
     const label = document.createElement('div');
     label.className = 'char-label';
-    label.innerHTML = `<span class="ch">${escHtml(printable)}</span> 0x${code.toString(16).toUpperCase().padStart(2,'0')}`;
+    const printable = (ch.code >= 32 && ch.code <= 126) ? String.fromCharCode(ch.code) : '·';
+    let labelHtml = `<span class="ch">${escHtml(printable)}</span> 0x${ch.code.toString(16).toUpperCase().padStart(2,'0')}`;
+    if (ch.charW !== ch.maxW) {
+      labelHtml += ` <span class="cw">w${ch.charW}</span>`;
+    }
+    label.innerHTML = labelHtml;
     card.appendChild(label);
 
     const canvas = document.createElement('canvas');
-    canvas.width = w * scale;
-    canvas.height = height * scale;
-    canvas.style.width = (w * scale) + 'px';
-    canvas.style.height = (height * scale) + 'px';
+    canvas.width = ch.charW * scale;
+    canvas.height = ch.height * scale;
+    canvas.style.width = (ch.charW * scale) + 'px';
+    canvas.style.height = (ch.height * scale) + 'px';
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0c0c14';
+    ctx.fillStyle = '#444';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    for (let col = 0; col < w; col++) {
-      const colOff = offset + 1 + col * bytesPerCol;
-      // Build column bitmask
-      let colBits = 0;
-      for (let b = 0; b < bytesPerCol; b++) {
-        const byte = rawBytes[colOff + b] || 0;
-        colBits |= byte << (b * 8);
-      }
+    const bpc = Math.ceil(ch.height / 8);
 
-      for (let row = 0; row < height; row++) {
+    for (let col = 0; col < ch.charW; col++) {
+      let colBits = 0;
+      for (let b = 0; b < bpc; b++) {
+        colBits |= (ch.columns[col * bpc + b] || 0) << (b * 8);
+      }
+      for (let row = 0; row < ch.height; row++) {
         if (colBits & (1 << row)) {
           ctx.fillStyle = onColor;
           ctx.fillRect(col * scale, row * scale, scale, scale);
@@ -255,12 +381,156 @@ function render() {
     card.appendChild(canvas);
     container.appendChild(card);
   }
+
+  if (chars.length === 0) {
+    container.innerHTML = '<div class="empty">No characters decoded — check format and dimensions</div>';
+  }
 }
 
-// Re-render on param change
-['fontHeight','maxCols','scale','firstChar','colorSelect'].forEach(id => {
-  $(id).addEventListener('change', render);
-  $(id).addEventListener('input', render);
+// ============================================================
+// STANG: no header, fixed width, sequential column bytes
+// Record = W * ceil(H/8) bytes
+// ============================================================
+function decodeStang() {
+  const w = parseInt($('fontWidth').value) || 5;
+  const h = parseInt($('fontHeight').value) || 7;
+  const first = parseInt($('firstChar').value) || 0;
+  const bpc = Math.ceil(h / 8);
+  const rec = w * bpc;
+  const numChars = Math.floor(rawBytes.length / rec);
+  const chars = [];
+
+  for (let i = 0; i < numChars; i++) {
+    const off = i * rec;
+    chars.push({
+      code: first + i,
+      charW: w,
+      maxW: w,
+      height: h,
+      recSize: rec,
+      columns: rawBytes.slice(off, off + rec),
+    });
+  }
+  return chars;
+}
+
+// ============================================================
+// MIKRO: Fixed width records.
+// With header: 4-byte header [width, height, firstChar, lastChar], data at byte 4.
+// Without header: uses UI field values, data starts at byte 0.
+// Record = W * ceil(H/8)
+// ============================================================
+function decodeMikro() {
+  const hdr = useHeader();
+  let w, h, first, numChars, dataStart;
+
+  if (hdr) {
+    if (rawBytes.length < 5) return [];
+    w = rawBytes[0];
+    h = rawBytes[1];
+    first = rawBytes[2];
+    const last = rawBytes[3];
+    numChars = last - first + 1;
+    dataStart = 4;
+    $('fontWidth').value = w;
+    $('fontHeight').value = h;
+    $('firstChar').value = first;
+  } else {
+    w = parseInt($('fontWidth').value) || 5;
+    h = parseInt($('fontHeight').value) || 7;
+    first = parseInt($('firstChar').value) || 0;
+    dataStart = 0;
+    const bpc = Math.ceil(h / 8);
+    const rec = w * bpc;
+    numChars = Math.floor(rawBytes.length / rec);
+  }
+
+  const bpc = Math.ceil(h / 8);
+  const rec = w * bpc;
+  const chars = [];
+
+  for (let i = 0; i < numChars; i++) {
+    const off = dataStart + i * rec;
+    if (off + rec > rawBytes.length) break;
+    chars.push({
+      code: first + i,
+      charW: w,
+      maxW: w,
+      height: h,
+      recSize: rec,
+      columns: rawBytes.slice(off, off + rec),
+    });
+  }
+  return chars;
+}
+
+// ============================================================
+// GLCD_UTILS: Variable width — each record starts with a width byte.
+// With header: 4-byte header [maxWidth, height, firstChar, charCount], data at byte 4.
+// Without header: uses UI field values, data starts at byte 0.
+// Record = 1 + maxW * ceil(H/8)  (padded to max width)
+// ============================================================
+function decodeGlcdUtils() {
+  const hdr = useHeader();
+  let maxW, h, first, numChars, dataStart;
+
+  if (hdr) {
+    if (rawBytes.length < 5) return [];
+    maxW = rawBytes[0];
+    h = rawBytes[1];
+    first = rawBytes[2];
+    numChars = rawBytes[3];
+    dataStart = 4;
+    $('fontWidth').value = maxW;
+    $('fontHeight').value = h;
+    $('firstChar').value = first;
+  } else {
+    maxW = parseInt($('fontWidth').value) || 5;
+    h = parseInt($('fontHeight').value) || 7;
+    first = parseInt($('firstChar').value) || 0;
+    dataStart = 0;
+    const bpc = Math.ceil(h / 8);
+    const rec = 1 + maxW * bpc;
+    numChars = Math.floor(rawBytes.length / rec);
+  }
+
+  const bpc = Math.ceil(h / 8);
+  const rec = 1 + maxW * bpc;
+  const chars = [];
+
+  for (let i = 0; i < numChars; i++) {
+    const off = dataStart + i * rec;
+    if (off >= rawBytes.length) break;
+    const charW = Math.min(rawBytes[off], maxW);
+    chars.push({
+      code: first + i,
+      charW: charW,
+      maxW: maxW,
+      height: h,
+      recSize: rec,
+      columns: rawBytes.slice(off + 1, off + 1 + charW * bpc),
+    });
+  }
+  return chars;
+}
+
+// Returns whether to use the 4-byte header
+function useHeader() {
+  const mode = $('headerMode').value;
+  if (mode === 'yes') return true;
+  if (mode === 'no') return false;
+  // auto: use header for mikro/glcd_utils, not for stang
+  const fmt = ($('tableFormat').value === 'auto') ? detectedFormat : $('tableFormat').value;
+  return (fmt === 'mikro' || fmt === 'glcd_utils');
+}
+
+// --- Re-render on param change ---
+['fontHeight','fontWidth','scale','firstChar','colorSelect','tableFormat','headerMode'].forEach(id => {
+  const el = $(id);
+  if (el) {
+    el.addEventListener('change', () => { updateUI(); render(); });
+    el.addEventListener('input', () => { updateUI(); render(); });
+  }
 });
 
 function dimColor(hex, factor) {
